@@ -1,0 +1,168 @@
+.receipt-upload {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.receipt-upload__label {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-h);
+}
+
+/* visually hidden native input */
+.receipt-upload__input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ── Drop zone (no file selected) ───────────────────────────────────────── */
+.receipt-upload__dropzone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  padding: 1.125rem 1rem;
+  border: 1.5px dashed var(--border);
+  border-radius: 0.625rem;
+  background-color: var(--code-bg);
+  cursor: pointer;
+  transition: border-color 150ms ease-in-out, background-color 150ms ease-in-out;
+  text-align: center;
+}
+
+.receipt-upload__dropzone:hover,
+.receipt-upload__dropzone:focus-within {
+  border-color: var(--accent);
+  background-color: var(--accent-bg);
+}
+
+.receipt-upload__dropzone:focus-within {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--accent-bg);
+}
+
+.receipt-upload__dropzone--error {
+  border-color: #ef4444;
+  background-color: #fff1f2;
+}
+
+.receipt-upload__dropzone-icon {
+  color: var(--text);
+  transition: color 150ms ease-in-out;
+}
+
+.receipt-upload__dropzone:hover .receipt-upload__dropzone-icon,
+.receipt-upload__dropzone:focus-within .receipt-upload__dropzone-icon {
+  color: var(--accent);
+}
+
+.receipt-upload__dropzone-text {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--text-h);
+  pointer-events: none;
+}
+
+.receipt-upload__dropzone-hint {
+  font-size: 0.75rem;
+  color: var(--text);
+  pointer-events: none;
+}
+
+/* ── Preview (file selected) ─────────────────────────────────────────────── */
+.receipt-upload__preview {
+  border: 1px solid var(--border);
+  border-radius: 0.625rem;
+  overflow: hidden;
+  background-color: var(--bg);
+}
+
+.receipt-upload__image {
+  width: 100%;
+  max-height: 120px;
+  object-fit: cover;
+  display: block;
+}
+
+.receipt-upload__meta {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0.5rem 0.75rem;
+  background-color: var(--code-bg);
+  border-top: 1px solid var(--border);
+}
+
+.receipt-upload__file-icon {
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+.receipt-upload__filename {
+  flex: 1;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--text-h);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.receipt-upload__replace {
+  flex-shrink: 0;
+  padding: 0.25rem 0.625rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  font-family: inherit;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 0.375rem;
+  color: var(--text);
+  cursor: pointer;
+  transition: background-color 120ms ease-in-out, border-color 120ms ease-in-out;
+}
+
+.receipt-upload__replace:hover {
+  background-color: var(--accent-bg);
+  border-color: var(--accent-border);
+  color: var(--accent);
+}
+
+/* Danger remove — no theme variable for error red */
+.receipt-upload__remove {
+  flex-shrink: 0;
+  padding: 0.25rem 0.625rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  font-family: inherit;
+  background: #fff1f2;
+  border: 1px solid #fca5a5;
+  border-radius: 0.375rem;
+  color: #ef4444;
+  cursor: pointer;
+  transition: background-color 120ms ease-in-out;
+}
+
+.receipt-upload__remove:hover {
+  background-color: #ffe4e6;
+}
+
+/* ── Error message ───────────────────────────────────────────────────────── */
+.receipt-upload__error {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  color: #ef4444;
+}

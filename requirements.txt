@@ -1,0 +1,8 @@
+# DevOps System & Tool Requirements
+# Ensure these components are installed on the deployment/development host:
+
+Node.js >= 20.0.0
+npm >= 10.2.0
+Docker >= 24.0.0
+Docker Compose >= 2.20.0
+Git >= 2.40.0

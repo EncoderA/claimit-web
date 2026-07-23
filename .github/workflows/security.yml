@@ -1,0 +1,58 @@
+name: Security
+
+# =============================================================================
+# Dedicated Security CI Pipeline — claimit-web
+# =============================================================================
+# Runs independently from the main CI pipeline.
+# Triggered on:
+#   - Every push to main or develop
+#   - Every PR targeting main or develop
+#   - On a weekly schedule (catches new CVEs in dependencies)
+#
+# Jobs:
+#   1. dep-audit    — Node.js dependency vulnerability audit
+# =============================================================================
+
+on:
+  push:
+    branches: ["main", "develop"]
+  pull_request:
+    branches: ["main", "develop"]
+  schedule:
+    # Run every Monday at 06:00 UTC — catches newly disclosed CVEs
+    - cron: "0 6 * * 1"
+
+jobs:
+  # ── Job 1: Dependency Vulnerability Audit ───────────────────────────────────
+  dep-audit:
+    name: "🛡️ Dependency Audit"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Run npm audit
+        run: |
+          echo "=== npm audit ==="
+          npm audit --audit-level=high
+
+  # ── Summary job — all security checks must pass ──────────────────────────────
+  security-gate:
+    name: "🚧 Security Gate"
+    runs-on: ubuntu-latest
+    needs: [dep-audit]
+    if: always()
+    steps:
+      - name: Check all security jobs passed
+        run: |
+          if [[ "${{ needs.dep-audit.result }}" == "failure" ]]; then
+            echo "❌ Dependency audit FAILED — critical CVEs detected"
+            exit 1
+          fi
+          echo "✅ All security checks passed"

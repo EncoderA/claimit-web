@@ -1,0 +1,13 @@
+# Check if any .env file is staged for commit
+if git diff --cached --name-only | grep -i '\.env'; then
+  echo "ERROR: You are trying to commit a .env file."
+  echo ""
+  echo "If you accidentally added it, remove it from the commit by running:"
+  echo "  git restore --staged <filename>"
+  echo ""
+  echo "Example:"
+  echo "  git restore --staged .env"
+  echo ""
+  echo "Also ensure the file is listed in your .gitignore before committing again."
+  exit 1
+fi

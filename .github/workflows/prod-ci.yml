@@ -92,29 +92,6 @@ jobs:
 
           echo "Smoke tests passed"
 
-      - name: Debug AWS Role
-        run: |
-          echo "Role ARN:"
-          echo "${{ secrets.PROD_AWS_ROLE_TO_ASSUME }}"
-          echo "Region:"
-          echo "${{ secrets.PROD_AWS_REGION }}"
-
-      - name: Debug GitHub Context
-        run: |
-          echo "Repository: $GITHUB_REPOSITORY"
-          echo "Ref: $GITHUB_REF"
-
-      - name: Check OIDC Environment
-        run: |
-          echo "ACTIONS_ID_TOKEN_REQUEST_URL=$ACTIONS_ID_TOKEN_REQUEST_URL"
-          echo "ACTIONS_ID_TOKEN_REQUEST_TOKEN is set: ${ACTIONS_ID_TOKEN_REQUEST_TOKEN:+YES}"
-
-      - name: Print workflow info
-        run: |
-          echo "Repository: $GITHUB_REPOSITORY"
-          echo "Ref: $GITHUB_REF"
-          echo "Workflow Ref: $GITHUB_WORKFLOW_REF"
-
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v6
         timeout-minutes: 1
@@ -127,26 +104,47 @@ jobs:
         uses: aws-actions/amazon-ecr-login@v2
 
       - name: Tag and Push Docker image
+        id: push
         env:
           ECR_REGISTRY: ${{ steps.ecr-login.outputs.registry }}
           ECR_REPOSITORY: ${{ secrets.PROD_ECR_REPOSITORY }}
         run: |
           set -euo pipefail
 
+          # Short SHA — single source of truth for this build
           IMAGE_TAG="sha-${GITHUB_SHA::7}"
-
-          IMAGE_SHA="$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+          IMAGE_URI="$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
           IMAGE_LATEST="$ECR_REGISTRY/$ECR_REPOSITORY:latest"
 
           echo "Pushing:"
-          echo "$IMAGE_SHA"
-          echo "$IMAGE_LATEST"
+          echo "  $IMAGE_URI"
+          echo "  $IMAGE_LATEST"
 
-          docker tag "$IMAGE_NAME" "$IMAGE_SHA"
+          docker tag "$IMAGE_NAME" "$IMAGE_URI"
           docker tag "$IMAGE_NAME" "$IMAGE_LATEST"
 
-          docker push "$IMAGE_SHA"
+          docker push "$IMAGE_URI"
           docker push "$IMAGE_LATEST"
+
+          # Expose for downstream steps — no reconstruction needed
+          echo "image_tag=$IMAGE_TAG" >> "$GITHUB_OUTPUT"
+          echo "image_uri=$IMAGE_URI" >> "$GITHUB_OUTPUT"
+      
+      - name: Trigger Deployment Repository
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.DEPLOY_REPO_PAT }}
+          repository: EncoderA/Claim-It
+          event-type: deploy-production
+          client-payload: |
+            {
+              "service": "frontend",
+              "environment": "production",
+              "image": "${{ steps.push.outputs.image_uri }}",
+              "image_tag": "${{ steps.push.outputs.image_tag }}",
+              "commit": "${{ github.sha }}",
+              "branch": "${{ github.ref_name }}"
+            }
 
       - name: Show container logs on failure
         if: failure()

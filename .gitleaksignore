@@ -1,0 +1,3 @@
+# Gitleaks ignore file
+# Ignore mock JWT secret finding in test file from earlier commit
+dd23d6d60a02696ed10212e9b5b0cf18c5a4833b:src/utils/jwt.test.js:generic-api-key:7

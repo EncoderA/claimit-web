@@ -1,0 +1,108 @@
+name: Security Scans
+
+on:
+  workflow_call:
+    outputs:
+      dependency_audit_result:
+        description: Result of the dependency audit job
+        value: ${{ jobs.dep-audit.result }}
+      sast_result:
+        description: Result of the Semgrep job
+        value: ${{ jobs.sast.result }}
+
+jobs:
+  dep-audit:
+    name: Dependency Audit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run npm audit and enforce vulnerability thresholds
+        run: |
+          set -euo pipefail
+          mkdir -p security-baseline
+          audit_report="security-baseline/dependency-audit.json"
+
+          # Preserve the JSON report even when npm audit detects vulnerabilities.
+          set +e
+          npm audit --json > "$audit_report"
+          npm_audit_exit_code=$?
+          set -e
+
+          if [[ ! -s "$audit_report" ]] || ! jq empty "$audit_report" >/dev/null 2>&1; then
+            echo "npm audit did not produce valid JSON at $audit_report"
+            exit 1
+          fi
+
+          high_vulns=$(jq -r '.metadata.vulnerabilities.high // 0' "$audit_report")
+          critical_vulns=$(jq -r '.metadata.vulnerabilities.critical // 0' "$audit_report")
+          medium_vulns=$(jq -r '.metadata.vulnerabilities.moderate // 0' "$audit_report")
+          low_vulns=$(jq -r '.metadata.vulnerabilities.low // 0' "$audit_report")
+
+          if ! [[ "$high_vulns" =~ ^[0-9]+$ && "$critical_vulns" =~ ^[0-9]+$ && "$medium_vulns" =~ ^[0-9]+$ && "$low_vulns" =~ ^[0-9]+$ ]]; then
+            echo "Unable to parse vulnerability counts"
+            exit 1
+          fi
+
+          echo "npm audit exit code: $npm_audit_exit_code"
+          echo "High vulnerabilities: $high_vulns"
+          echo "Critical vulnerabilities: $critical_vulns"
+          echo "Medium vulnerabilities (warning): $medium_vulns"
+          echo "Low vulnerabilities (info): $low_vulns"
+
+          if (( critical_vulns > 0 )); then
+            echo "Security gate failed: critical vulnerabilities found"
+            exit 1
+          fi
+
+          if (( high_vulns > 5 )); then
+            echo "Security gate failed: more than 5 high vulnerabilities found"
+            exit 1
+          fi
+
+          echo "Dependency audit passed: critical=$critical_vulns, high=$high_vulns, medium=$medium_vulns, low=$low_vulns"
+
+      - name: Upload dependency audit report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dependency-audit-web
+          path: security-baseline/dependency-audit.json
+          retention-days: 90
+          if-no-files-found: warn
+
+  sast:
+    name: SAST (Semgrep)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Run Semgrep SAST scan
+        run: |
+          python -m pip install --disable-pip-version-check --quiet semgrep
+          semgrep scan --config p/javascript --config p/typescript --sarif --output semgrep.sarif --error .
+
+      - name: Upload Semgrep report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sast-web
+          path: semgrep.sarif
+          retention-days: 90
+          if-no-files-found: warn

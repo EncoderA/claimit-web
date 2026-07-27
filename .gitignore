@@ -1,4 +1,3 @@
-```gitignore
 .env
 .env.*
 !.env.example
@@ -35,6 +34,9 @@ dist/
 dist-ssr/
 build/
 coverage/
+playwright-report/
+test-results/
+.env.test
 .next/
 .nuxt/
 .out/
@@ -62,4 +64,6 @@ ehthumbs.db
 tmp/
 temp/
 *.tmp
-```
+
+# Local Tools
+.tools/

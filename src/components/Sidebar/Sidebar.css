@@ -36,3 +36,9 @@
   color: var(--accent);
   font-weight: 600;
 }
+
+.sidebar-link.disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: none;
+}

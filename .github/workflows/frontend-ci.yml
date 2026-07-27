@@ -1,0 +1,194 @@
+name: Frontend CI/CD
+
+on:
+  push:
+    branches: [develop]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  IMAGE_NAME: claimit-frontend-ci
+  CONTAINER_NAME: claimit-frontend-ci-test
+  HOST_PORT: 5173
+  CONTAINER_PORT: 4173
+
+jobs:
+  # =========================
+  # CI: BUILD, TEST, PUSH
+  # =========================
+  build-test-push:
+    name: Build, Test and Push
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build frontend Docker image
+        env:
+          VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL }}
+        run: |
+          set -euo pipefail
+
+          docker build \
+            --build-arg VITE_API_BASE_URL="$VITE_API_BASE_URL" \
+            -t "$IMAGE_NAME" \
+            .
+
+      - name: Start frontend test container
+        run: |
+          set -euo pipefail
+
+          docker run -d \
+            --name "$CONTAINER_NAME" \
+            -p "$HOST_PORT:$CONTAINER_PORT" \
+            "$IMAGE_NAME"
+
+      - name: Wait for frontend startup
+        run: |
+          set -euo pipefail
+
+          for i in {1..30}; do
+
+            if docker ps \
+              --filter "name=^/${CONTAINER_NAME}$" \
+              --format '{{.Names}}' | grep -q .; then
+
+              if curl -fsS "http://127.0.0.1:$HOST_PORT/" >/dev/null 2>&1; then
+                echo "Frontend is responding"
+                break
+              fi
+
+            else
+              echo "Container exited unexpectedly"
+              docker logs "$CONTAINER_NAME" || true
+              exit 1
+            fi
+
+            if [ "$i" -eq 30 ]; then
+              echo "Frontend did not become ready in time"
+              docker logs "$CONTAINER_NAME" || true
+              exit 1
+            fi
+
+            sleep 2
+          done
+
+      - name: Smoke test frontend
+        run: |
+          set -euo pipefail
+
+          curl -fsS "http://127.0.0.1:$HOST_PORT/" >/dev/null
+          curl -fsS "http://127.0.0.1:$HOST_PORT/login" >/dev/null
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Tag and push image to ECR
+        env:
+          ECR_REGISTRY: ${{ steps.ecr-login.outputs.registry }}
+          ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
+        run: |
+          set -euo pipefail
+
+          IMAGE_TAG="sha-${GITHUB_SHA::7}"
+          ECR_IMAGE="$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+
+          echo "Pushing image: $ECR_IMAGE"
+
+          docker tag "$IMAGE_NAME" "$ECR_IMAGE"
+          docker push "$ECR_IMAGE"
+
+      - name: Show container logs on failure
+        if: failure()
+        run: |
+          echo "Container status:"
+          docker ps -a \
+            --filter "name=^/${CONTAINER_NAME}$" || true
+
+          echo "Container logs:"
+          docker logs "$CONTAINER_NAME" || true
+
+      - name: Cleanup test container
+        if: always()
+        run: |
+          docker rm -f "$CONTAINER_NAME" >/dev/null 2>&1 || true
+
+
+  # =========================
+  # CD: DEPLOY TO EC2
+  # =========================
+  deploy:
+    name: Deploy Frontend to EC2
+    runs-on: ubuntu-latest
+
+    # CD runs only after CI succeeds
+    needs: build-test-push
+
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Deploy frontend through SSM
+        env:
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+          ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
+          INSTANCE_ID: i-04c7dc34ecc105832
+          AWS_ACCOUNT_ID: "945488515971"
+
+        run: |
+          set -euo pipefail
+
+          IMAGE_TAG="sha-${GITHUB_SHA::7}"
+
+          ECR_REGISTRY="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+
+          ECR_IMAGE="${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG}"
+
+          echo "Deploying image:"
+          echo "$ECR_IMAGE"
+
+          COMMAND_ID=$(aws ssm send-command \
+            --instance-ids "$INSTANCE_ID" \
+            --document-name "AWS-RunShellScript" \
+            --comment "Deploy ClaimIt frontend ${IMAGE_TAG}" \
+            --parameters "commands=[
+              \"set -e\",
+              \"aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${ECR_REGISTRY}\",
+              \"docker pull ${ECR_IMAGE}\",
+              \"docker rm -f claimit-frontend || true\",
+              \"docker run -d --name claimit-frontend --restart unless-stopped -p 80:4173 ${ECR_IMAGE}\",
+              \"sleep 5\",
+              \"curl -fsS http://localhost/ >/dev/null\",
+              \"docker ps --filter name=claimit-frontend\"
+            ]" \
+            --query "Command.CommandId" \
+            --output text)
+
+          echo "SSM Command ID: $COMMAND_ID"
+
+          echo "Waiting for deployment..."
+
+          aws ssm wait command-executed \
+            --command-id "$COMMAND_ID" \
+            --instance-id "$INSTANCE_ID"
+
+          echo "Deployment result:"
+
+          aws ssm get-command-invocation \
+            --command-id "$COMMAND_ID" \
+            --instance-id "$INSTANCE_ID" \
+            --query '{Status:Status,Output:StandardOutputContent,Error:StandardErrorContent}'

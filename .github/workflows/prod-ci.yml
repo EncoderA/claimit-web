@@ -1,0 +1,164 @@
+name: prod-ci
+
+on:
+  push:
+    branches:
+      - main
+      - feature/prod-cicd
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: prod-frontend-ci
+  cancel-in-progress: true
+
+env:
+  IMAGE_NAME: claimit-frontend
+  CONTAINER_NAME: claimit-frontend-test
+  HOST_PORT: 8080
+  CONTAINER_PORT: 4173
+
+jobs:
+  build-test-push:
+    name: Build, Test & Push
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Build Frontend Docker image
+        env:
+          VITE_API_BASE_URL: ${{ secrets.PROD_VITE_API_BASE_URL }}
+        run: |
+          set -euo pipefail
+
+          docker build \
+            --build-arg VITE_API_BASE_URL="$VITE_API_BASE_URL" \
+            --label org.opencontainers.image.revision="$GITHUB_SHA" \
+            --label org.opencontainers.image.source="$GITHUB_REPOSITORY" \
+            -t "$IMAGE_NAME" \
+            .
+
+      - name: Start frontend test container
+        run: |
+          set -euo pipefail
+
+          docker run -d \
+            --name "$CONTAINER_NAME" \
+            -p "$HOST_PORT:$CONTAINER_PORT" \
+            "$IMAGE_NAME"
+
+      - name: Wait for frontend startup
+        run: |
+          set -euo pipefail
+
+          # Give vite preview a moment to bind before we start polling
+          sleep 5
+
+          for i in {1..40}; do
+
+            if docker ps \
+              --filter "name=^/${CONTAINER_NAME}$" \
+              --format '{{.Names}}' | grep -q .; then
+
+              if curl -fsS "http://127.0.0.1:$HOST_PORT/" >/dev/null 2>&1; then
+                echo "Frontend is responding"
+                exit 0
+              fi
+
+            else
+              echo "Container exited unexpectedly"
+              docker logs "$CONTAINER_NAME" || true
+              exit 1
+            fi
+
+            sleep 2
+          done
+
+          echo "Frontend did not become ready in time"
+          docker logs "$CONTAINER_NAME" || true
+          exit 1
+
+      - name: Smoke test frontend
+        run: |
+          set -euo pipefail
+
+          curl -fsS "http://127.0.0.1:$HOST_PORT/" >/dev/null
+          curl -fsS "http://127.0.0.1:$HOST_PORT/login" >/dev/null
+
+          echo "Smoke tests passed"
+
+      - name: Debug AWS Role
+        run: |
+          echo "Role ARN:"
+          echo "${{ secrets.PROD_AWS_ROLE_TO_ASSUME }}"
+          echo "Region:"
+          echo "${{ secrets.PROD_AWS_REGION }}"
+
+      - name: Debug GitHub Context
+        run: |
+          echo "Repository: $GITHUB_REPOSITORY"
+          echo "Ref: $GITHUB_REF"
+
+      - name: Check OIDC Environment
+        run: |
+          echo "ACTIONS_ID_TOKEN_REQUEST_URL=$ACTIONS_ID_TOKEN_REQUEST_URL"
+          echo "ACTIONS_ID_TOKEN_REQUEST_TOKEN is set: ${ACTIONS_ID_TOKEN_REQUEST_TOKEN:+YES}"
+
+      - name: Print workflow info
+        run: |
+          echo "Repository: $GITHUB_REPOSITORY"
+          echo "Ref: $GITHUB_REF"
+          echo "Workflow Ref: $GITHUB_WORKFLOW_REF"
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        timeout-minutes: 1
+        with:
+          role-to-assume: ${{ secrets.PROD_AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ secrets.PROD_AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Tag and Push Docker image
+        env:
+          ECR_REGISTRY: ${{ steps.ecr-login.outputs.registry }}
+          ECR_REPOSITORY: ${{ secrets.PROD_ECR_REPOSITORY }}
+        run: |
+          set -euo pipefail
+
+          IMAGE_TAG="sha-${GITHUB_SHA::7}"
+
+          IMAGE_SHA="$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+          IMAGE_LATEST="$ECR_REGISTRY/$ECR_REPOSITORY:latest"
+
+          echo "Pushing:"
+          echo "$IMAGE_SHA"
+          echo "$IMAGE_LATEST"
+
+          docker tag "$IMAGE_NAME" "$IMAGE_SHA"
+          docker tag "$IMAGE_NAME" "$IMAGE_LATEST"
+
+          docker push "$IMAGE_SHA"
+          docker push "$IMAGE_LATEST"
+
+      - name: Show container logs on failure
+        if: failure()
+        run: |
+          echo "Container status:"
+          docker ps -a \
+            --filter "name=^/${CONTAINER_NAME}$" || true
+
+          echo "Container logs:"
+          docker logs "$CONTAINER_NAME" || true
+
+      - name: Cleanup test container
+        if: always()
+        run: |
+          docker rm -f "$CONTAINER_NAME" >/dev/null 2>&1 || true

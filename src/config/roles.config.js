@@ -17,9 +17,32 @@ export const NAV_ITEMS = [
     roles: [ROLES.MANAGER],
   },
   {
-    label: 'Finance Dashboard',
-    path: '/finance',
+    label: 'Batch Review',
+    path: '/finance/batch-review',
     roles: [ROLES.FINANCE],
+  },
+  {
+    label: 'Payout Batches',
+    path: '/finance/payout-batches',
+    roles: [ROLES.FINANCE],
+  },
+  {
+    label: 'Finance Ops',
+    path: '#',
+    roles: [ROLES.FINANCE],
+    disabled: true,
+  },
+  {
+    label: 'Spend Analytics',
+    path: '#',
+    roles: [ROLES.FINANCE],
+    disabled: true,
+  },
+  {
+    label: 'Risk & Compliance',
+    path: '#',
+    roles: [ROLES.FINANCE],
+    disabled: true,
   },
   {
     label: 'Admin Dashboard',

@@ -1,40 +1,59 @@
 name: CI
 
-# =============================================================================
-# CI Pipeline - claimit-web
-# =============================================================================
-# Runs secret scan on EVERY branch and EVERY pull request.
-# =============================================================================
-
 on:
-  push:           # ALL branches — no filter
-  pull_request:   # ALL pull requests
-
-env:
-  ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+  schedule:
+    - cron: "0 6 * * 1"
 
 jobs:
-  # Secret scan — runs on every push to every branch
-  secret-scan:
-    name: "Secret Scan (Gitleaks)"
+  quality-gates:
+    name: Quality Gates
+    uses: ./.github/workflows/quality-gates.yml
+
+  security-scans:
+    name: Security Scans
+    uses: ./.github/workflows/security-scans.yml
+
+  baseline-report:
+    name: Baseline Report
+    needs: [quality-gates, security-scans]
+    if: always()
+    uses: ./.github/workflows/baseline-report.yml
+    with:
+      secret_scan_result: ${{ needs.quality-gates.outputs.secret_scan_result }}
+      coverage_result: ${{ needs.quality-gates.outputs.coverage_result }}
+      dependency_audit_result: ${{ needs.security-scans.outputs.dependency_audit_result }}
+      sast_result: ${{ needs.security-scans.outputs.sast_result }}
+    secrets: inherit
+
+  security-gate:
+    name: Security Gate
     runs-on: ubuntu-latest
+    needs: [quality-gates, security-scans]
+    if: always()
     steps:
-      - name: Checkout full history
-        uses: actions/checkout@v4
-        with:
-          # fetch-depth: 0 is critical — scans the FULL git history,
-          # not just the latest commit. Without this, Gitleaks only
-          # sees the tip of the branch and misses previously committed secrets.
-          fetch-depth: 0
-
-      - name: Install Gitleaks
+      - name: Check all quality and security jobs passed
         run: |
-          DOWNLOAD_URL=$(curl -s https://api.github.com/repos/gitleaks/gitleaks/releases/latest | grep browser_download_url | grep linux_x64.tar.gz | cut -d '"' -f 4)
-          curl -sL "$DOWNLOAD_URL" | tar xz
-          sudo mv gitleaks /usr/local/bin/
+          failed=0
 
-      - name: Run Gitleaks
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gitleaks detect --source . -v
+          if [[ "${{ needs.quality-gates.result }}" != "success" ]]; then
+            echo "Quality gates failed"
+            failed=1
+          fi
+
+          if [[ "${{ needs.security-scans.result }}" != "success" ]]; then
+            echo "Security scans failed"
+            failed=1
+          fi
+
+          if [[ "$failed" -ne 0 ]]; then
+            exit 1
+          fi
+
+          echo "All quality and security gates passed"

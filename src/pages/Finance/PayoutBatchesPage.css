@@ -1,0 +1,203 @@
+.payout-batches-container {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  padding: 0;
+  box-sizing: border-box;
+  width: 100%;
+}
+
+.payout-header-section {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.payout-page-title {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: var(--text-h);
+  margin: 0 0 0.25rem 0;
+}
+
+.payout-page-subtitle {
+  font-size: 0.95rem;
+  color: var(--text);
+  margin: 0;
+}
+
+.nav-to-review-btn {
+  background: var(--social-bg);
+  border: 1px solid var(--border);
+  color: var(--text-h);
+  padding: 0.6rem 1.2rem;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.15s, border-color 0.15s;
+}
+
+.nav-to-review-btn:hover {
+  background: var(--border);
+  border-color: var(--accent);
+}
+
+.payout-alert {
+  padding: 0.85rem 1.2rem;
+  border-radius: 8px;
+  font-size: 0.9rem;
+}
+
+.alert-error {
+  background-color: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  color: #ef4444;
+}
+
+.payout-table-card {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: var(--shadow);
+  width: 100%;
+}
+
+.payout-loading-state,
+.payout-empty-state {
+  padding: 3rem;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  color: var(--text);
+}
+
+.payout-spinner {
+  width: 28px;
+  height: 28px;
+  border: 3px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: payoutSpin 0.8s linear infinite;
+}
+
+@keyframes payoutSpin {
+  to { transform: rotate(360deg); }
+}
+
+.payout-empty-state .empty-icon {
+  font-size: 2.5rem;
+  opacity: 0.6;
+}
+
+.create-first-batch-btn {
+  margin-top: 0.5rem;
+  background-color: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 0.6rem 1.2rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.payout-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 0.9rem;
+}
+
+.payout-table th {
+  padding: 0.85rem 1.25rem;
+  background-color: var(--social-bg);
+  color: var(--text-h);
+  font-weight: 600;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid var(--border);
+}
+
+.payout-table td {
+  padding: 0.95rem 1.25rem;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  vertical-align: middle;
+}
+
+.payout-table tr:hover td {
+  background-color: var(--social-bg);
+}
+
+.col-batch-id {
+  font-family: monospace;
+  font-weight: 700;
+  color: var(--text-h);
+}
+
+.col-reports-count {
+  font-weight: 500;
+}
+
+.col-batch-total {
+  font-weight: 700;
+  color: var(--text-h);
+}
+
+.col-batch-date {
+  color: var(--text);
+}
+
+.batch-status-badge {
+  display: inline-block;
+  padding: 0.25rem 0.65rem;
+  border-radius: 12px;
+  font-weight: 600;
+  font-size: 0.8rem;
+}
+
+.status-paid {
+  background-color: rgba(16, 185, 129, 0.15);
+  color: #10b981;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.status-processing {
+  background-color: rgba(245, 158, 11, 0.15);
+  color: #f59e0b;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.status-pending {
+  background-color: var(--social-bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+.export-csv-btn {
+  background: var(--social-bg);
+  border: 1px solid var(--border);
+  color: var(--accent);
+  padding: 0.45rem 0.9rem;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.15s, border-color 0.15s, transform 0.15s;
+}
+
+.export-csv-btn:hover:not(:disabled) {
+  background-color: var(--accent-bg);
+  border-color: var(--accent);
+  transform: translateY(-1px);
+}
+
+.export-csv-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

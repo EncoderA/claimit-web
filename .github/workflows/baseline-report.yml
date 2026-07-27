@@ -1,0 +1,165 @@
+name: Baseline Report
+
+on:
+  workflow_call:
+    inputs:
+      secret_scan_result:
+        required: false
+        type: string
+      coverage_result:
+        required: false
+        type: string
+      dependency_audit_result:
+        required: false
+        type: string
+      sast_result:
+        required: false
+        type: string
+    secrets:
+      SLACK_WEBHOOK_URL:
+        required: false
+
+jobs:
+  report:
+    name: Security Baseline Report
+    runs-on: ubuntu-latest
+    steps:
+      - name: Prepare baseline folders
+        run: mkdir -p security-baseline/coverage security-baseline/dependency-audit security-baseline/sast
+
+      - name: Download coverage report
+        uses: actions/download-artifact@v4
+        with:
+          name: coverage-web
+          path: security-baseline/coverage
+        continue-on-error: true
+
+      - name: Download dependency audit report
+        uses: actions/download-artifact@v4
+        with:
+          name: dependency-audit-web
+          path: security-baseline/dependency-audit
+        continue-on-error: true
+
+      - name: Download SAST report
+        uses: actions/download-artifact@v4
+        with:
+          name: sast-web
+          path: security-baseline/sast
+        continue-on-error: true
+
+      - name: Generate baseline summary
+        run: |
+          test_total=0
+          test_passed=0
+          test_failed=0
+          if [[ -f security-baseline/coverage/test-results.json ]]; then
+            test_total=$(jq '.numTotalTests // 0' security-baseline/coverage/test-results.json 2>/dev/null || echo "0")
+            test_passed=$(jq '.numPassedTests // 0' security-baseline/coverage/test-results.json 2>/dev/null || echo "0")
+            test_failed=$(jq '.numFailedTests // 0' security-baseline/coverage/test-results.json 2>/dev/null || echo "0")
+          fi
+
+          audit_high=0
+          audit_critical=0
+          audit_medium=0
+          audit_low=0
+          if [[ -f security-baseline/dependency-audit/dependency-audit.json ]]; then
+            audit_high=$(jq '.metadata.vulnerabilities.high // 0' security-baseline/dependency-audit/dependency-audit.json 2>/dev/null || echo "0")
+            audit_critical=$(jq '.metadata.vulnerabilities.critical // 0' security-baseline/dependency-audit/dependency-audit.json 2>/dev/null || echo "0")
+            audit_medium=$(jq '.metadata.vulnerabilities.moderate // 0' security-baseline/dependency-audit/dependency-audit.json 2>/dev/null || echo "0")
+            audit_low=$(jq '.metadata.vulnerabilities.low // 0' security-baseline/dependency-audit/dependency-audit.json 2>/dev/null || echo "0")
+          fi
+
+          sast_findings=0
+          if [[ -f security-baseline/sast/semgrep.sarif ]]; then
+            sast_findings=$(jq '[.runs[].results[]] | length' security-baseline/sast/semgrep.sarif 2>/dev/null || echo "0")
+          fi
+
+          cat > security-baseline/summary.md <<EOF
+          # CI Quality Gate Baseline - claimit-web
+
+          - Repository: ${{ github.repository }}
+          - Run: ${{ github.run_id }}
+          - Commit: ${{ github.sha }}
+          - Date: $(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+          ## Job Status
+          | Gate | Result |
+          | ---- | ------ |
+          | Secret Scan | ${{ inputs.secret_scan_result }} |
+          | Coverage Gate | ${{ inputs.coverage_result }} |
+          | Dependency Audit | ${{ inputs.dependency_audit_result }} |
+          | SAST | ${{ inputs.sast_result }} |
+
+          ## Test Results
+          | Total Tests | Passed | Failed |
+          | ----------- | ------ | ------ |
+          | ${test_total} | ${test_passed} | ${test_failed} |
+
+          ## Security Scans
+          | Scan Type | Findings / Vulnerabilities |
+          | --------- | -------------------------- |
+          | Dependency Audit | ${audit_critical} Critical (Fail) / ${audit_high} High (Fail if >5) / ${audit_medium} Medium (Warn) / ${audit_low} Low (Info) |
+          | SAST (Semgrep) | ${sast_findings} Findings |
+          EOF
+
+          cat security-baseline/summary.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload security baseline bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-baseline-web-${{ github.run_id }}-${{ github.sha }}
+          path: security-baseline/
+          retention-days: 90
+
+      - name: Notify CI quality gate result (Slack)
+        if: github.event_name == 'push' && (github.ref_name == 'main' || github.ref_name == 'develop')
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          if [[ -z "$SLACK_WEBHOOK_URL" ]]; then
+            echo "SLACK_WEBHOOK_URL is not configured; skipping notification"
+            exit 0
+          fi
+
+          audit_high=0
+          audit_critical=0
+          audit_medium=0
+          audit_low=0
+          if [[ -f security-baseline/dependency-audit/dependency-audit.json ]]; then
+            audit_high=$(jq '.metadata.vulnerabilities.high // 0' security-baseline/dependency-audit/dependency-audit.json 2>/dev/null || echo "0")
+            audit_critical=$(jq '.metadata.vulnerabilities.critical // 0' security-baseline/dependency-audit/dependency-audit.json 2>/dev/null || echo "0")
+            audit_medium=$(jq '.metadata.vulnerabilities.moderate // 0' security-baseline/dependency-audit/dependency-audit.json 2>/dev/null || echo "0")
+            audit_low=$(jq '.metadata.vulnerabilities.low // 0' security-baseline/dependency-audit/dependency-audit.json 2>/dev/null || echo "0")
+          fi
+
+          sast_findings=0
+          if [[ -f security-baseline/sast/semgrep.sarif ]]; then
+            sast_findings=$(jq '[.runs[].results[]] | length' security-baseline/sast/semgrep.sarif 2>/dev/null || echo "0")
+          fi
+
+          status_text="PASSED"
+          if [[ "${{ inputs.secret_scan_result }}" != "success" || "${{ inputs.coverage_result }}" != "success" || "${{ inputs.dependency_audit_result }}" != "success" || "${{ inputs.sast_result }}" != "success" ]]; then
+            status_text="FAILED"
+          fi
+
+          cat > slack-payload.json <<EOF
+          {
+            "text": "CI Quality Gate ${status_text}: claimit-web",
+            "blocks": [
+              {"type":"header","text":{"type":"plain_text","text":"CI Quality Gate ${status_text}"}},
+              {"type":"section","fields":[
+                {"type":"mrkdwn","text":"*Repository:*\\nclaimit-web"},
+                {"type":"mrkdwn","text":"*GitHub Run:*\\n<https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}|${{ github.run_id }}>"}
+              ]},
+              {"type":"section","text":{"type":"mrkdwn","text":"*Gate Status*\\n- Secret Scan: ${{ inputs.secret_scan_result }}\\n- Coverage Gate: ${{ inputs.coverage_result }}\\n- Dependency Audit: ${{ inputs.dependency_audit_result }}\\n- SAST: ${{ inputs.sast_result }}"}},
+              {"type":"section","text":{"type":"mrkdwn","text":"*Dependency Audit*\\n- Critical: ${audit_critical} (fail if >0)\\n- High: ${audit_high} (fail if >5)\\n- Medium: ${audit_medium} (warn)\\n- Low: ${audit_low} (info)"}},
+              {"type":"section","text":{"type":"mrkdwn","text":"*SAST (Semgrep)*\\n- Findings: ${sast_findings}"}},
+              {"type":"context","elements":[{"type":"mrkdwn","text":"Artifacts: coverage-web, dependency-audit-web, sast-web, security-baseline-web-${{ github.run_id }}-${{ github.sha }}"}]}
+            ]
+          }
+          EOF
+
+          curl --fail-with-body -sS -X POST "$SLACK_WEBHOOK_URL" \
+            -H 'Content-Type: application/json' \
+            -d @slack-payload.json

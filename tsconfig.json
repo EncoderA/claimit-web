@@ -1,0 +1,30 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "lib": [
+      "ESNext",
+      "DOM",
+      "DOM.Iterable"
+    ],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "jsxImportSource": "react",
+    "strict": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "allowJs": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "types": [
+      "vitest/globals"
+    ]
+  },
+  "include": [
+    "src/**/*",
+    "test/**/*",
+    "vite.config.js",
+    "eslint.config.js"
+  ]
+}

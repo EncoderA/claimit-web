@@ -3,7 +3,8 @@ import { createBrowserRouter, RouterProvider, Navigate } from 'react-router-dom'
 import HomePage from '../pages/Home/HomePage';
 import EmployeeDashboard from '../pages/Employee/EmployeeDashboard';
 import ManagerDashboard from '../pages/Manager/ManagerDashboard';
-import FinanceDashboard from '../pages/Finance/FinanceDashboard';
+import BatchReviewPage from '../pages/Finance/BatchReviewPage';
+import PayoutBatchesPage from '../pages/Finance/PayoutBatchesPage';
 import AdminDashboard from '../pages/Admin/AdminDashboard';
 import LoginPage from '../pages/Login/LoginPage';
 import ResetPasswordPage from '../pages/Login/ResetPasswordPage';
@@ -34,7 +35,6 @@ const router = createBrowserRouter([
   {
     element: <DashboardLayout />,
     children: [
-
       {
         element: <ProtectedRoute allowedRoles={[ROLES.EMPLOYEE]} />,
         children: [
@@ -62,7 +62,15 @@ const router = createBrowserRouter([
         children: [
           {
             path: '/finance',
-            element: <FinanceDashboard />,
+            element: <Navigate to="/finance/batch-review" replace />,
+          },
+          {
+            path: '/finance/batch-review',
+            element: <BatchReviewPage />,
+          },
+          {
+            path: '/finance/payout-batches',
+            element: <PayoutBatchesPage />,
           },
         ],
       },

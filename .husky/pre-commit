@@ -1,6 +1,16 @@
-# Check if any .env file is staged for commit
-if git diff --cached --name-only | grep -i '\.env'; then
+#!/usr/bin/env bash
+
+# Check if any real .env file (excluding .env.example) is staged for commit
+if git diff --cached --name-only \
+    | grep -Ei '(^|/)\.env($|\.)' \
+    | grep -Evi '\.env\.example$'; then
+
   echo "ERROR: You are trying to commit a .env file."
+  echo ""
+  echo "The following .env file(s) are staged:"
+  git diff --cached --name-only \
+    | grep -Ei '(^|/)\.env($|\.)' \
+    | grep -Evi '\.env\.example$'
   echo ""
   echo "If you accidentally added it, remove it from the commit by running:"
   echo "  git restore --staged <filename>"
@@ -11,3 +21,7 @@ if git diff --cached --name-only | grep -i '\.env'; then
   echo "Also ensure the file is listed in your .gitignore before committing again."
   exit 1
 fi
+
+# Run Gitleaks scan
+bash scripts/gitleaks.sh
+exit $?

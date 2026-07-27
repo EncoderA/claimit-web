@@ -59,27 +59,48 @@ export const AuthProvider = ({ children }) => {
   };
 
   const login = async (email, password) => {
-    const data = await loginRequest(email, password);
-    
-    if (data.tokenType === 'PASSWORD_RESET_REQUIRED') {
-      // Save passwordResetToken in sessionStorage
-      sessionStorage.setItem('claimit_password_reset_token', data.passwordResetToken);
-      setUser(null);
-      return { passwordResetRequired: true };
-    }
+    try {
+      const data = await loginRequest(email, password);
+      
+      if (data.tokenType === 'PASSWORD_RESET_REQUIRED') {
+        // Save passwordResetToken in sessionStorage
+        sessionStorage.setItem('claimit_password_reset_token', data.passwordResetToken);
+        setUser(null);
+        return { passwordResetRequired: true };
+      }
 
-    // Full Session
-    setAccessToken(data.accessToken);
-    setRefreshToken(data.refreshToken);
-    
-    const userPayload = extractUserFromToken(data.accessToken);
-    if (userPayload) {
-      setUser(userPayload);
-      scheduleSilentRefresh(data.expiresIn || 900);
-      return { passwordResetRequired: false, user: userPayload };
+      // Full Session
+      setAccessToken(data.accessToken);
+      setRefreshToken(data.refreshToken);
+      
+      const userPayload = extractUserFromToken(data.accessToken);
+      if (userPayload) {
+        setUser(userPayload);
+        scheduleSilentRefresh(data.expiresIn || 900);
+        return { passwordResetRequired: false, user: userPayload };
+      }
+      
+      throw new Error('Authentication failed: Invalid token payload.');
+    } catch (err) {
+      // Fallback for local development testing when backend server is offline
+      if (import.meta.env.DEV && (!err.status || err.message === 'Something went wrong. Please try again.')) {
+        console.warn('Backend server is offline. Using dev mock session.');
+        let role = 'EMPLOYEE';
+        if (email.includes('finance')) role = 'FINANCE';
+        else if (email.includes('manager')) role = 'MANAGER';
+        else if (email.includes('admin')) role = 'ADMIN';
+
+        const mockUser = {
+          id: 'dev-user-id',
+          name: email.split('@')[0].replace('.', ' '),
+          email,
+          role,
+        };
+        setUser(mockUser);
+        return { passwordResetRequired: false, user: mockUser };
+      }
+      throw err;
     }
-    
-    throw new Error('Authentication failed: Invalid token payload.');
   };
 
   const handlePasswordResetSuccess = (accessToken, refreshToken) => {

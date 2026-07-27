@@ -19,17 +19,23 @@ const Sidebar = () => {
   return (
     <aside className="sidebar">
       <nav className="sidebar-menu">
-        {navItems.map((item) => (
-          <NavLink
-            key={item.path}
-            to={item.path}
-            className={({ isActive }) =>
-              `sidebar-link ${isActive ? 'active' : ''}`
-            }
-          >
-            {item.label}
-          </NavLink>
-        ))}
+        {navItems.map((item) =>
+          item.disabled ? (
+            <span key={item.label} className="sidebar-link disabled">
+              {item.label}
+            </span>
+          ) : (
+            <NavLink
+              key={item.path}
+              to={item.path}
+              className={({ isActive }) =>
+                `sidebar-link ${isActive ? 'active' : ''}`
+              }
+            >
+              {item.label}
+            </NavLink>
+          )
+        )}
       </nav>
     </aside>
   );

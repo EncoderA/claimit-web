@@ -1,0 +1,82 @@
+name: Quality Gates
+
+on:
+  workflow_call:
+    outputs:
+      secret_scan_result:
+        description: Result of the Gitleaks job
+        value: ${{ jobs.secret-scan.result }}
+      coverage_result:
+        description: Result of the coverage job
+        value: ${{ jobs.coverage-gate.result }}
+
+jobs:
+  secret-scan:
+    name: Secret Scan (Gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout full history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Gitleaks
+        run: |
+          download_url=$(curl -s https://api.github.com/repos/gitleaks/gitleaks/releases/latest | grep browser_download_url | grep linux_x64.tar.gz | cut -d '"' -f 4)
+          curl -sL "$download_url" | tar xz
+          sudo mv gitleaks /usr/local/bin/
+
+      - name: Run Gitleaks
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gitleaks detect --source . -v
+
+  coverage-gate:
+    name: Coverage Gate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run coverage gate
+        run: npm run test:coverage -- --reporter=verbose --reporter=json --outputFile.json=test-results.json
+
+      - name: Upload coverage and test report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-web
+          path: |
+            coverage/
+            test-results.json
+          retention-days: 30
+          if-no-files-found: warn
+
+      - name: Generate coverage summary
+        if: always()
+        run: |
+          test_total=0
+          test_passed=0
+          test_failed=0
+          if [[ -f test-results.json ]]; then
+            test_total=$(jq '.numTotalTests // 0' test-results.json 2>/dev/null || echo "0")
+            test_passed=$(jq '.numPassedTests // 0' test-results.json 2>/dev/null || echo "0")
+            test_failed=$(jq '.numFailedTests // 0' test-results.json 2>/dev/null || echo "0")
+          fi
+
+          cat >> "$GITHUB_STEP_SUMMARY" <<EOF
+          # Test Results - claimit-web
+
+          | Total Tests | Passed | Failed/Errors |
+          | ----------- | ------ | ------------- |
+          | ${test_total} | ${test_passed} | ${test_failed} |
+          EOF

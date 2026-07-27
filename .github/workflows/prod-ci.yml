@@ -104,32 +104,27 @@ jobs:
         uses: aws-actions/amazon-ecr-login@v2
 
       - name: Tag and Push Docker image
-        id: push
         env:
           ECR_REGISTRY: ${{ steps.ecr-login.outputs.registry }}
           ECR_REPOSITORY: ${{ secrets.PROD_ECR_REPOSITORY }}
         run: |
           set -euo pipefail
 
-          # Short SHA — single source of truth for this build
           IMAGE_TAG="sha-${GITHUB_SHA::7}"
-          IMAGE_URI="$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+
+          IMAGE_SHA="$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
           IMAGE_LATEST="$ECR_REGISTRY/$ECR_REPOSITORY:latest"
 
           echo "Pushing:"
-          echo "  $IMAGE_URI"
-          echo "  $IMAGE_LATEST"
+          echo "$IMAGE_SHA"
+          echo "$IMAGE_LATEST"
 
-          docker tag "$IMAGE_NAME" "$IMAGE_URI"
+          docker tag "$IMAGE_NAME" "$IMAGE_SHA"
           docker tag "$IMAGE_NAME" "$IMAGE_LATEST"
 
-          docker push "$IMAGE_URI"
+          docker push "$IMAGE_SHA"
           docker push "$IMAGE_LATEST"
 
-          # Expose for downstream steps — no reconstruction needed
-          echo "image_tag=$IMAGE_TAG" >> "$GITHUB_OUTPUT"
-          echo "image_uri=$IMAGE_URI" >> "$GITHUB_OUTPUT"
-      
       - name: Trigger Deployment Repository
         uses: peter-evans/repository-dispatch@v3
         with:
@@ -140,8 +135,8 @@ jobs:
             {
               "service": "frontend",
               "environment": "production",
-              "image": "${{ steps.push.outputs.image_uri }}",
-              "image_tag": "${{ steps.push.outputs.image_tag }}",
+              "image": "${{ steps.ecr-login.outputs.registry }}/${{ secrets.PROD_ECR_REPOSITORY }}:sha-${{ github.sha }}",
+              "image_tag": "sha-${{ github.sha }}",
               "commit": "${{ github.sha }}",
               "branch": "${{ github.ref_name }}"
             }
